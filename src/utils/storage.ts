@@ -6,10 +6,6 @@ import VoiceBoard, {
 export const getMode = () => VoiceBoard.getMode();
 export const setMode = (value: Mode) => VoiceBoard.setMode(value);
 
-export const setClaudeApiKey = (value: string) =>
-  VoiceBoard.setClaudeApiKey(value);
-export const hasClaudeApiKey = () => VoiceBoard.hasClaudeApiKey();
-
 export const getTranscriptionEngine = () => VoiceBoard.getTranscriptionEngine();
 export const setTranscriptionEngine = (value: TranscriptionEngine) =>
   VoiceBoard.setTranscriptionEngine(value);

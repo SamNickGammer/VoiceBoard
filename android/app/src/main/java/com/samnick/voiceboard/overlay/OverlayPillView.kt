@@ -25,7 +25,6 @@ class OverlayPillView(context: Context) : View(context) {
 
   interface Listener {
     fun onTap()
-    fun onLongPress()
     fun onDrag(dx: Float, dy: Float)
     fun onDragEnd()
   }
@@ -56,10 +55,8 @@ class OverlayPillView(context: Context) : View(context) {
         override fun onSingleTapUp(e: MotionEvent): Boolean {
           listener?.onTap(); return true
         }
-
-        override fun onLongPress(e: MotionEvent) {
-          listener?.onLongPress()
-        }
+        // Intentionally no onLongPress — mode picker lives in the notification
+        // panel so a slow drag doesn't accidentally pop a menu over the pill.
       },
   )
 

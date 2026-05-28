@@ -9,9 +9,14 @@ object TranscriptionRouter {
 
   private val groq = GroqEngine()
 
-  suspend fun transcribe(context: Context, wavFile: File, capture: AudioCapture?): String {
+  suspend fun transcribe(
+      context: Context,
+      wavFile: File,
+      capture: AudioCapture?,
+      languageHint: String?,
+  ): String {
     val engine = PrefsBridge.getTranscriptionEngine(context)
-    return engineFor(engine).transcribe(context, wavFile, capture)
+    return engineFor(engine).transcribe(context, wavFile, capture, languageHint)
   }
 
   fun engineFor(name: String): TranscriptionEngine = when (name) {

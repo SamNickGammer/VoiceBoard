@@ -33,11 +33,12 @@ class GroqEngine : TranscriptionEngine {
       context: Context,
       wavFile: File,
       capture: AudioCapture?,
+      languageHint: String?,
   ): String = withContext(Dispatchers.IO) {
     val apiKey = PrefsBridge.getGroqApiKey(context)
     require(apiKey.isNotBlank()) { "Groq API key not set" }
 
-    val multipart = MultipartBody.Builder()
+    val multipartBuilder = MultipartBody.Builder()
         .setType(MultipartBody.FORM)
         .addFormDataPart(
             "file",
@@ -47,7 +48,13 @@ class GroqEngine : TranscriptionEngine {
         .addFormDataPart("model", "whisper-large-v3-turbo")
         .addFormDataPart("response_format", "json")
         .addFormDataPart("temperature", "0")
-        .build()
+    // Only pin language when the keyboard is Hindi. For English keyboards we
+    // let Whisper auto-detect so Hindi speech still comes through (we'll
+    // romanise it to Hinglish via the LLM step).
+    if (languageHint == "hi") {
+      multipartBuilder.addFormDataPart("language", "hi")
+    }
+    val multipart = multipartBuilder.build()
 
     val request = Request.Builder()
         .url("https://api.groq.com/openai/v1/audio/transcriptions")

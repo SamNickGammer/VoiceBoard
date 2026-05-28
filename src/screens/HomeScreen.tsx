@@ -11,7 +11,6 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import StatusCard from '../components/StatusCard';
 import {
-  hasClaudeApiKey,
   hasGroqApiKey,
   hasMicPermission,
   hasOverlayPermission,
@@ -32,23 +31,20 @@ export default function HomeScreen({navigation}: Props) {
   const [a11y, setA11y] = useState(false);
   const [mic, setMic] = useState(false);
   const [groqKey, setGroqKey] = useState(false);
-  const [claudeKey, setClaudeKey] = useState(false);
   const [overlayRunning, setOverlayRunning] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [op, a, m, g, c, r] = await Promise.all([
+    const [op, a, m, g, r] = await Promise.all([
       hasOverlayPermission(),
       isAccessibilityEnabled(),
       hasMicPermission(),
       hasGroqApiKey(),
-      hasClaudeApiKey(),
       isOverlayRunning(),
     ]);
     setOverlayPerm(op);
     setA11y(a);
     setMic(m);
     setGroqKey(g);
-    setClaudeKey(c);
     setOverlayRunning(r);
   }, []);
 
@@ -73,8 +69,8 @@ export default function HomeScreen({navigation}: Props) {
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>VoiceBoard</Text>
         <Text style={styles.subtitle}>
-          Floating mic pill that lives above any keyboard. Tap, speak, tap again — the
-          transcribed text is injected into whatever you're typing in.
+          Floating mic pill that appears whenever a keyboard is open. Tap to dictate, tap again
+          to inject the transcribed text into the focused field.
         </Text>
 
         <View style={styles.bigCta}>
@@ -92,7 +88,7 @@ export default function HomeScreen({navigation}: Props) {
           </TouchableOpacity>
           {!allReady ? (
             <Text style={styles.bigCtaHint}>
-              Grant the permissions below before starting.
+              Grant the permissions below and add a Groq key before starting.
             </Text>
           ) : null}
         </View>
@@ -116,8 +112,8 @@ export default function HomeScreen({navigation}: Props) {
           title="Accessibility service"
           subtitle={
             a11y
-              ? 'Enabled. Transcriptions can be injected into the focused field.'
-              : 'Lets VoiceBoard set text on the field you are typing in. Without this, transcribed text is copied to clipboard instead.'
+              ? 'Enabled. The pill appears only when a keyboard is up, and transcripts are injected into the focused field.'
+              : 'Required so the pill knows when a keyboard is open and can write back into the field you are typing in.'
           }
           ok={a11y}
           cta={
@@ -129,9 +125,7 @@ export default function HomeScreen({navigation}: Props) {
 
         <StatusCard
           title="Microphone"
-          subtitle={
-            mic ? 'Granted.' : 'Required to record what you say.'
-          }
+          subtitle={mic ? 'Granted.' : 'Required to record what you say.'}
           ok={mic}
           cta={
             mic
@@ -147,37 +141,30 @@ export default function HomeScreen({navigation}: Props) {
         />
 
         <StatusCard
-          title="Transcription engine"
+          title="Groq API key (Whisper + LLM)"
           subtitle={
             groqKey
-              ? 'Groq API key saved. Free Whisper-large-v3-turbo will be used by default.'
-              : 'Add a Groq API key for free remote transcription, or download a local Whisper model in Settings.'
+              ? 'Saved. Used for both Whisper transcription and the mode LLM (llama-3.3-70b).'
+              : 'One free key from console.groq.com powers both transcription and mode post-processing.'
           }
           ok={groqKey}
           cta={{label: 'Open settings', onPress: () => navigation.navigate('Settings')}}
         />
 
-        <StatusCard
-          title="Claude post-processing"
-          subtitle={
-            claudeKey
-              ? 'Claude key saved. Transcripts get cleaned per the selected mode.'
-              : 'Optional. Without it, the raw transcription is injected as-is.'
-          }
-          ok={claudeKey}
-          cta={{label: 'Open settings', onPress: () => navigation.navigate('Settings')}}
-        />
-
         <View style={styles.helpBlock}>
           <Text style={styles.helpTitle}>How it works</Text>
-          <Text style={styles.helpStep}>1. Grant the three permissions above.</Text>
-          <Text style={styles.helpStep}>2. Add a Groq key (or download a local model).</Text>
-          <Text style={styles.helpStep}>3. Tap "Start overlay" — a small pill appears.</Text>
+          <Text style={styles.helpStep}>1. Grant the three permissions above + add a Groq key.</Text>
+          <Text style={styles.helpStep}>2. Tap "Start overlay" — nothing happens visually yet.</Text>
           <Text style={styles.helpStep}>
-            4. Switch to any app, tap into a text field, tap the pill, speak, tap again.
+            3. Open any app, tap a text field — the pill slides in.
           </Text>
           <Text style={styles.helpStep}>
-            5. Long-press the pill to switch Claude mode. Drag to reposition.
+            4. Tap pill → speak → tap again. Mode (default/formal/generate) lives in the
+            notification drawer.
+          </Text>
+          <Text style={styles.helpStep}>
+            5. Hindi on a Hindi keyboard stays Devanagari; Hindi on an English keyboard comes out
+            as Hinglish.
           </Text>
         </View>
       </ScrollView>

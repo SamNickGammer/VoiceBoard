@@ -10,8 +10,14 @@ import {
   View,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {VoiceBoardEvents, type DownloadEvent, type ModelCatalogEntry, type Mode, type TranscriptionEngine} from '../native/VoiceBoardModule';
-import {MODE_DESCRIPTIONS, callClaude} from '../utils/claudeApi';
+import {
+  VoiceBoardEvents,
+  type DownloadEvent,
+  type ModelCatalogEntry,
+  type Mode,
+  type TranscriptionEngine,
+} from '../native/VoiceBoardModule';
+import {MODE_DESCRIPTIONS} from '../utils/prompts';
 import ConsoleView, {type ConsoleLine} from '../components/ConsoleView';
 import {
   cancelDownload,
@@ -20,12 +26,10 @@ import {
   getActiveModel,
   getMode,
   getTranscriptionEngine,
-  hasClaudeApiKey,
   hasGroqApiKey,
   isLocalWhisperLibAvailable,
   listModelCatalog,
   setActiveModel,
-  setClaudeApiKey as saveClaudeKey,
   setGroqApiKey as saveGroqKey,
   setMode as saveMode,
   setTranscriptionEngine,
@@ -43,22 +47,16 @@ export default function SettingsScreen() {
   const [groqTesting, setGroqTesting] = useState(false);
   const [groqTestResult, setGroqTestResult] = useState<string | null>(null);
 
-  const [claudeInput, setClaudeInput] = useState('');
-  const [claudeSaved, setClaudeSaved] = useState(false);
-  const [claudeTesting, setClaudeTesting] = useState(false);
-  const [claudeTestResult, setClaudeTestResult] = useState<string | null>(null);
-
   const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
   const [activeModel, setActive] = useState<string | null>(null);
   const [localLibOk, setLocalLibOk] = useState(false);
   const [logs, setLogs] = useState<ConsoleLine[]>([]);
 
   const refresh = useCallback(async () => {
-    const [e, m, g, c, cat, am, lib] = await Promise.all([
+    const [e, m, g, cat, am, lib] = await Promise.all([
       getTranscriptionEngine(),
       getMode(),
       hasGroqApiKey(),
-      hasClaudeApiKey(),
       listModelCatalog(),
       getActiveModel(),
       isLocalWhisperLibAvailable(),
@@ -66,7 +64,6 @@ export default function SettingsScreen() {
     setEngine(e);
     setMode(m);
     setGroqSaved(g);
-    setClaudeSaved(c);
     setCatalog(cat);
     setActive(am);
     setLocalLibOk(lib);
@@ -118,39 +115,15 @@ export default function SettingsScreen() {
     setGroqTestResult(null);
     try {
       const text = await testGroqKey(key);
-      setGroqTestResult(text ? `Empty (expected) — auth OK. "${text}"` : 'Auth OK — empty (silence sent).');
+      setGroqTestResult(
+        text
+          ? `Auth OK. Whisper returned: "${text}"`
+          : 'Auth OK — empty transcript (silence sent).',
+      );
     } catch (e) {
       setGroqTestResult(`Error: ${(e as Error).message}`);
     } finally {
       setGroqTesting(false);
-    }
-  };
-
-  const onSaveClaude = async () => {
-    if (!claudeInput.trim()) return;
-    await saveClaudeKey(claudeInput.trim());
-    setClaudeSaved(true);
-    setClaudeInput('');
-  };
-
-  const onClearClaude = async () => {
-    await saveClaudeKey('');
-    setClaudeSaved(false);
-    setClaudeTestResult(null);
-  };
-
-  const onTestClaude = async () => {
-    const key = claudeInput.trim();
-    if (!key) return;
-    setClaudeTesting(true);
-    setClaudeTestResult(null);
-    try {
-      const text = await callClaude('hey can you confirm you got this', 'formal', key);
-      setClaudeTestResult(text || '(empty response)');
-    } catch (e) {
-      setClaudeTestResult(`Error: ${(e as Error).message}`);
-    } finally {
-      setClaudeTesting(false);
     }
   };
 
@@ -210,11 +183,11 @@ export default function SettingsScreen() {
           />
         </View>
         <Text style={styles.hint}>
-          Active engine is what the floating pill will use. Groq is free, online, ~1s. Local runs
-          fully on-device (no network) but you need to download a model.
+          Groq is free, online, ~1s. Local runs fully on-device (no network) but you need to
+          download a model.
         </Text>
 
-        <Text style={styles.section}>Claude mode (post-processing)</Text>
+        <Text style={styles.section}>Default post-processing mode</Text>
         <View style={styles.row}>
           {MODES.map(m => (
             <Pill key={m} label={cap(m)} active={mode === m} onPress={() => onSelectMode(m)} />
@@ -224,10 +197,14 @@ export default function SettingsScreen() {
           <Text style={styles.modeTitle}>{cap(mode)}</Text>
           <Text style={styles.modeDesc}>{MODE_DESCRIPTIONS[mode]}</Text>
         </View>
+        <Text style={styles.hint}>
+          You can also switch modes from the VoiceBoard notification once the overlay is running.
+        </Text>
 
         <Text style={styles.section}>Groq API key</Text>
         <Text style={styles.hint}>
-          Free at console.groq.com. Stored in Android Keystore. {groqSaved ? 'Saved.' : 'Not set.'}
+          Free at console.groq.com. Used for Whisper transcription AND llama-3.3-70b post-processing.
+          Stored in Android Keystore. {groqSaved ? 'Saved.' : 'Not set.'}
         </Text>
         <TextInput
           style={styles.input}
@@ -304,42 +281,6 @@ export default function SettingsScreen() {
           </View>
         ))}
         <ConsoleView lines={logs} />
-
-        <Text style={styles.section}>Claude API key (for mode post-processing)</Text>
-        <Text style={styles.hint}>
-          Optional. If unset, transcribed text is injected raw. {claudeSaved ? 'Saved.' : 'Not set.'}
-        </Text>
-        <TextInput
-          style={styles.input}
-          placeholder="sk-ant-..."
-          placeholderTextColor="#9CA3AF"
-          value={claudeInput}
-          onChangeText={setClaudeInput}
-          autoCapitalize="none"
-          autoCorrect={false}
-          secureTextEntry
-        />
-        <View style={styles.row}>
-          <TouchableOpacity
-            style={[styles.btn, {opacity: claudeInput.trim() ? 1 : 0.4}]}
-            onPress={onSaveClaude} disabled={!claudeInput.trim()}>
-            <Text style={styles.btnText}>Save key</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.btn, styles.btnGhost, {marginLeft: 8, opacity: claudeSaved ? 1 : 0.4}]}
-            onPress={onClearClaude} disabled={!claudeSaved}>
-            <Text style={[styles.btnText, {color: '#7F77DD'}]}>Clear</Text>
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity
-          style={[styles.testBtn, {opacity: claudeInput.trim() && !claudeTesting ? 1 : 0.4}]}
-          onPress={onTestClaude}
-          disabled={!claudeInput.trim() || claudeTesting}>
-          {claudeTesting ? <ActivityIndicator color="#7F77DD" /> : (
-            <Text style={[styles.btnText, {color: '#7F77DD'}]}>Test Claude key (formal mode)</Text>
-          )}
-        </TouchableOpacity>
-        {claudeTestResult ? <Text style={styles.testResult}>{claudeTestResult}</Text> : null}
       </ScrollView>
     </SafeAreaView>
   );

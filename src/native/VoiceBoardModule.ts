@@ -24,9 +24,6 @@ type VoiceBoardModuleType = {
   getMode(): Promise<Mode>;
   setMode(value: Mode): Promise<void>;
 
-  setClaudeApiKey(value: string): Promise<void>;
-  hasClaudeApiKey(): Promise<boolean>;
-
   getTranscriptionEngine(): Promise<TranscriptionEngine>;
   setTranscriptionEngine(value: TranscriptionEngine): Promise<void>;
   setGroqApiKey(value: string): Promise<void>;

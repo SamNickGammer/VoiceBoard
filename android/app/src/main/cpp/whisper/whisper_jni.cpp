@@ -48,7 +48,7 @@ Java_com_samnick_voiceboard_transcription_WhisperJNI_nativeInit(
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_samnick_voiceboard_transcription_WhisperJNI_nativeTranscribe(
-        JNIEnv * env, jobject /* this */, jfloatArray jpcm, jint n_threads) {
+        JNIEnv * env, jobject /* this */, jfloatArray jpcm, jint n_threads, jstring jlanguage) {
     std::lock_guard<std::mutex> lk(g_lock);
     if (!g_ctx) {
         LOGW("nativeTranscribe: no context loaded");
@@ -63,6 +63,16 @@ Java_com_samnick_voiceboard_transcription_WhisperJNI_nativeTranscribe(
     std::vector<float> pcm(static_cast<size_t>(len));
     env->GetFloatArrayRegion(jpcm, 0, len, pcm.data());
 
+    // Keep the language string alive across the whisper_full call.
+    std::string lang = "auto";
+    if (jlanguage) {
+        const char * lang_c = env->GetStringUTFChars(jlanguage, nullptr);
+        if (lang_c) {
+            lang = lang_c;
+            env->ReleaseStringUTFChars(jlanguage, lang_c);
+        }
+    }
+
     whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
     wparams.n_threads        = std::max(1, static_cast<int>(n_threads));
     wparams.translate        = false;
@@ -73,9 +83,9 @@ Java_com_samnick_voiceboard_transcription_WhisperJNI_nativeTranscribe(
     wparams.no_context       = true;
     wparams.single_segment   = false;
     wparams.suppress_blank   = true;
-    wparams.language         = "auto";
+    wparams.language         = lang.c_str();
 
-    LOGI("transcribe: %d samples, %d threads", len, wparams.n_threads);
+    LOGI("transcribe: %d samples, %d threads, lang=%s", len, wparams.n_threads, lang.c_str());
 
     const int rc = whisper_full(g_ctx, wparams, pcm.data(), static_cast<int>(pcm.size()));
     if (rc != 0) {

@@ -20,7 +20,7 @@ object PrefsBridge {
   const val KEY_TRANSCRIPTION_ENGINE = "transcription_engine"
   const val DEFAULT_TRANSCRIPTION_ENGINE = "groq"
 
-  // Claude mode — "default" | "formal" | "generate"
+  // Post-processing mode — "default" | "formal" | "generate"
   const val KEY_MODE = "mode"
   const val DEFAULT_MODE = "default"
 
@@ -35,7 +35,6 @@ object PrefsBridge {
   const val KEY_OVERLAY_ENABLED = "overlay_enabled"
 
   // Secure keys
-  const val KEY_CLAUDE_API_KEY = "claude_api_key"
   const val KEY_GROQ_API_KEY = "groq_api_key"
 
   fun prefs(context: Context): SharedPreferences =
@@ -95,15 +94,6 @@ object PrefsBridge {
   fun setOverlayEnabled(context: Context, value: Boolean) {
     prefs(context).edit().putBoolean(KEY_OVERLAY_ENABLED, value).apply()
   }
-
-  fun getClaudeApiKey(context: Context): String =
-      securePrefs(context).getString(KEY_CLAUDE_API_KEY, "") ?: ""
-
-  fun setClaudeApiKey(context: Context, value: String) {
-    securePrefs(context).edit().putString(KEY_CLAUDE_API_KEY, value).apply()
-  }
-
-  fun hasClaudeApiKey(context: Context): Boolean = getClaudeApiKey(context).isNotBlank()
 
   fun getGroqApiKey(context: Context): String =
       securePrefs(context).getString(KEY_GROQ_API_KEY, "") ?: ""

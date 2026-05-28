@@ -7,14 +7,16 @@ import java.io.File
 /**
  * Implemented by each transcription backend. Engines are stateless; per-call
  * configuration (file or PCM, language hint, model path, etc.) is passed in.
+ *
+ * @param languageHint either "hi" (force Hindi decoding) or "en" / null
+ *                     (let Whisper auto-detect). The router derives this from
+ *                     the user's currently-selected on-screen keyboard.
  */
 interface TranscriptionEngine {
-  /**
-   * Transcribe the audio in [wavFile] (16 kHz mono PCM_16 WAV) and return the text.
-   * The [capture] reference is provided so the engine can call
-   * [AudioCapture.readAsFloats] if it prefers raw PCM (local whisper does).
-   *
-   * Throws on transport or engine-level failures.
-   */
-  suspend fun transcribe(context: Context, wavFile: File, capture: AudioCapture?): String
+  suspend fun transcribe(
+      context: Context,
+      wavFile: File,
+      capture: AudioCapture?,
+      languageHint: String?,
+  ): String
 }

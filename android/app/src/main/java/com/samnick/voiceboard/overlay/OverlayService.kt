@@ -21,6 +21,7 @@ import androidx.core.app.NotificationCompat
 import com.samnick.voiceboard.MainActivity
 import com.samnick.voiceboard.R
 import com.samnick.voiceboard.a11y.A11yBus
+import com.samnick.voiceboard.core.KeyboardLocale
 import com.samnick.voiceboard.core.ModeProcessor
 import com.samnick.voiceboard.core.PrefsBridge
 import com.samnick.voiceboard.transcription.TranscriptionRouter
@@ -42,6 +43,7 @@ class OverlayService : Service() {
 
     const val ACTION_START = "com.samnick.voiceboard.overlay.START"
     const val ACTION_STOP = "com.samnick.voiceboard.overlay.STOP"
+    private const val ACTION_SET_MODE_PREFIX = "com.samnick.voiceboard.overlay.SET_MODE_"
 
     fun start(context: Context) {
       val intent = Intent(context, OverlayService::class.java).setAction(ACTION_START)
@@ -61,13 +63,14 @@ class OverlayService : Service() {
   private lateinit var wm: WindowManager
   private var pill: OverlayPillView? = null
   private var pillParams: WindowManager.LayoutParams? = null
-  private var modeMenu: ModeMenuView? = null
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
   private var transcribeJob: Job? = null
   private var capture: AudioCapture? = null
   private var captureFile: File? = null
   private var isRecording = false
+
+  private val a11yListener: () -> Unit = { scope.launch { syncPillVisibility() } }
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -78,7 +81,14 @@ class OverlayService : Service() {
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    when (intent?.action) {
+    val action = intent?.action
+    if (action != null && action.startsWith(ACTION_SET_MODE_PREFIX)) {
+      val mode = action.removePrefix(ACTION_SET_MODE_PREFIX)
+      PrefsBridge.setMode(this, mode)
+      refreshNotification()
+      return START_STICKY
+    }
+    when (action) {
       ACTION_STOP -> { stopOverlay(); return START_NOT_STICKY }
     }
     if (!Settings.canDrawOverlays(this)) {
@@ -87,39 +97,45 @@ class OverlayService : Service() {
       return START_NOT_STICKY
     }
     startForegroundCompat()
-    ensurePill()
+    A11yBus.addListener(a11yListener)
     PrefsBridge.setOverlayEnabled(this, true)
     running = true
+    // Initial sync: show pill only if the keyboard is actually up right now.
+    syncPillVisibility()
     return START_STICKY
   }
 
   override fun onDestroy() {
     running = false
+    A11yBus.removeListener(a11yListener)
     PrefsBridge.setOverlayEnabled(this, false)
     transcribeJob?.cancel()
     scope.cancel()
     try { capture?.stop() } catch (_: Throwable) {}
     removePill()
-    removeModeMenu()
     super.onDestroy()
   }
 
+  /**
+   * Whether the pill should be on screen right now. We require:
+   *  - an active recording (don't yank it mid-utterance), OR
+   *  - the accessibility service reporting an editable focused node + visible IME.
+   *
+   * Anything else (home screen, accessibility off, no editable focused) → hide.
+   */
+  private fun shouldPillBeVisible(): Boolean {
+    if (isRecording) return true
+    return A11yBus.shouldShowPill()
+  }
+
+  private fun syncPillVisibility() {
+    if (shouldPillBeVisible()) ensurePill() else removePill()
+  }
+
+  // ---- Foreground notification --------------------------------------------
+
   private fun startForegroundCompat() {
-    val tap = PendingIntent.getActivity(
-        this,
-        0,
-        Intent(this, MainActivity::class.java),
-        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-    )
-    val notif: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-        .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-        .setContentTitle(getString(R.string.overlay_notification_title))
-        .setContentText(getString(R.string.overlay_notification_text))
-        .setContentIntent(tap)
-        .setOngoing(true)
-        .setPriority(NotificationCompat.PRIORITY_LOW)
-        .setCategory(NotificationCompat.CATEGORY_SERVICE)
-        .build()
+    val notif = buildNotification(PrefsBridge.getMode(this))
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
       startForeground(
           NOTIFICATION_ID,
@@ -138,6 +154,44 @@ class OverlayService : Service() {
     }
   }
 
+  private fun refreshNotification() {
+    if (!running) return
+    val mgr = getSystemService(NotificationManager::class.java) ?: return
+    mgr.notify(NOTIFICATION_ID, buildNotification(PrefsBridge.getMode(this)))
+  }
+
+  private fun buildNotification(currentMode: String): Notification {
+    val tap = PendingIntent.getActivity(
+        this,
+        0,
+        Intent(this, MainActivity::class.java),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+        .setContentTitle(getString(R.string.overlay_notification_title))
+        .setContentText("Mode: ${currentMode.replaceFirstChar { it.uppercase() }}")
+        .setContentIntent(tap)
+        .setOngoing(true)
+        .setPriority(NotificationCompat.PRIORITY_LOW)
+        .setCategory(NotificationCompat.CATEGORY_SERVICE)
+
+    listOf("default", "formal", "generate").forEach { m ->
+      val intent = Intent(this, OverlayService::class.java)
+          .setAction("$ACTION_SET_MODE_PREFIX$m")
+      val pending = PendingIntent.getService(
+          this,
+          m.hashCode(),
+          intent,
+          PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+      )
+      val label = (if (m == currentMode) "● " else "") + m.replaceFirstChar { it.uppercase() }
+      builder.addAction(0, label, pending)
+    }
+    return builder.build()
+  }
+
   private fun createNotificationChannel() {
     if (Build.VERSION.SDK_INT < 26) return
     val mgr = getSystemService(NotificationManager::class.java) ?: return
@@ -150,6 +204,8 @@ class OverlayService : Service() {
     ch.description = "Lets VoiceBoard's floating mic stay active while you dictate."
     mgr.createNotificationChannel(ch)
   }
+
+  // ---- Pill view -----------------------------------------------------------
 
   private fun ensurePill() {
     if (pill != null) return
@@ -193,8 +249,6 @@ class OverlayService : Service() {
   private val pillListener = object : OverlayPillView.Listener {
     override fun onTap() { toggleRecording() }
 
-    override fun onLongPress() { showModeMenu() }
-
     override fun onDrag(dx: Float, dy: Float) {
       val v = pill ?: return
       val p = pillParams ?: return
@@ -212,6 +266,8 @@ class OverlayService : Service() {
   private fun overlayType(): Int =
       if (Build.VERSION.SDK_INT >= 26) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
       else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+
+  // ---- Record / transcribe / inject ---------------------------------------
 
   private fun toggleRecording() {
     if (isRecording) stopRecordingAndProcess() else startRecording()
@@ -245,23 +301,30 @@ class OverlayService : Service() {
       pill?.setState(OverlayPillView.State.IDLE)
       toast("Too short, try again")
       try { file.delete() } catch (_: Throwable) {}
+      syncPillVisibility()
       return
     }
+
+    // Sample the keyboard language once, while the user's IME state is fresh.
+    val keyboardLang = KeyboardLocale.detect(this)
 
     transcribeJob?.cancel()
     transcribeJob = scope.launch {
       try {
         val raw = withContext(Dispatchers.IO) {
-          TranscriptionRouter.transcribe(this@OverlayService, file, cap)
+          TranscriptionRouter.transcribe(this@OverlayService, file, cap, keyboardLang)
         }
         val mode = PrefsBridge.getMode(this@OverlayService)
-        val claudeKey = PrefsBridge.getClaudeApiKey(this@OverlayService)
-        val finalText = if (claudeKey.isBlank() || raw.isBlank()) raw
-        else runCatching {
-          ModeProcessor.process(raw, mode, claudeKey)
-        }.getOrElse {
-          toast("Claude failed: ${it.message?.take(60)}")
+        val groqKey = PrefsBridge.getGroqApiKey(this@OverlayService)
+        val finalText = if (groqKey.isBlank() || raw.isBlank()) {
           raw
+        } else {
+          runCatching {
+            ModeProcessor.process(raw, mode, keyboardLang, groqKey)
+          }.getOrElse {
+            toast("LLM failed: ${it.message?.take(60)}")
+            raw
+          }
         }
         injectOrCopy(finalText)
       } catch (t: Throwable) {
@@ -269,6 +332,7 @@ class OverlayService : Service() {
       } finally {
         pill?.setState(OverlayPillView.State.IDLE)
         try { file.delete() } catch (_: Throwable) {}
+        syncPillVisibility()
       }
     }
   }
@@ -286,44 +350,10 @@ class OverlayService : Service() {
     }
   }
 
-  private fun showModeMenu() {
-    if (modeMenu != null) { removeModeMenu(); return }
-    val menu = ModeMenuView(this) { mode ->
-      PrefsBridge.setMode(this, mode)
-      toast("Mode: $mode")
-      removeModeMenu()
-    }
-    val p = pillParams
-    val w = dp(180f).toInt(); val h = dp(140f).toInt()
-    val params = WindowManager.LayoutParams(
-        w,
-        h,
-        overlayType(),
-        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-        PixelFormat.TRANSLUCENT,
-    ).apply {
-      gravity = Gravity.TOP or Gravity.START
-      x = ((p?.x ?: 0) + ((pill?.width ?: 0) - w) / 2).coerceAtLeast(0)
-      y = ((p?.y ?: 0) - h - dp(8f).toInt()).coerceAtLeast(0)
-    }
-    try {
-      wm.addView(menu, params)
-      modeMenu = menu
-    } catch (_: Throwable) {}
-  }
-
-  private fun removeModeMenu() {
-    modeMenu?.let { v -> try { wm.removeView(v) } catch (_: Throwable) {} }
-    modeMenu = null
-  }
-
   private fun stopOverlay() {
     transcribeJob?.cancel()
     try { capture?.stop() } catch (_: Throwable) {}
     removePill()
-    removeModeMenu()
     stopForeground(STOP_FOREGROUND_REMOVE)
     stopSelf()
   }

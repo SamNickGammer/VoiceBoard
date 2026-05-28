@@ -20,6 +20,7 @@ object LocalWhisperEngine : TranscriptionEngine {
       context: Context,
       wavFile: File,
       capture: AudioCapture?,
+      languageHint: String?,
   ): String = withContext(Dispatchers.Default) {
     val modelFile = ModelDownloader.activeModelFile(context)
         ?: throw IllegalStateException("No local whisper model selected. Download one in Settings.")
@@ -27,7 +28,8 @@ object LocalWhisperEngine : TranscriptionEngine {
     val pcm = capture?.readAsFloats() ?: readWavAsFloats(wavFile)
     if (pcm.isEmpty()) return@withContext ""
     val nThreads = Runtime.getRuntime().availableProcessors().coerceAtMost(4)
-    val out = WhisperJNI.transcribe(pcm, nThreads)
+    val lang = if (languageHint == "hi") "hi" else "auto"
+    val out = WhisperJNI.transcribe(pcm, nThreads, lang)
     out.trim()
   }
 
@@ -114,10 +116,10 @@ internal object WhisperJNI {
     return nativeInit(modelPath)
   }
 
-  fun transcribe(pcm: FloatArray, nThreads: Int): String {
+  fun transcribe(pcm: FloatArray, nThreads: Int, language: String): String {
     ensureLoaded()
     if (!loaded) throw RuntimeException("Native whisper library not available")
-    return nativeTranscribe(pcm, nThreads) ?: ""
+    return nativeTranscribe(pcm, nThreads, language) ?: ""
   }
 
   fun release() {
@@ -126,7 +128,7 @@ internal object WhisperJNI {
   }
 
   private external fun nativeInit(modelPath: String): Boolean
-  private external fun nativeTranscribe(pcm: FloatArray, nThreads: Int): String?
+  private external fun nativeTranscribe(pcm: FloatArray, nThreads: Int, language: String): String?
   private external fun nativeRelease()
 }
 

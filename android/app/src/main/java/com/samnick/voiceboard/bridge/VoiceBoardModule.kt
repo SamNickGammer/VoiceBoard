@@ -37,7 +37,7 @@ class VoiceBoardModule(private val reactContext: ReactApplicationContext) :
     const val NAME = "VoiceBoard"
   }
 
-  // ---- Mode / Claude ----
+  // ---- Mode ----
 
   @ReactMethod
   fun getMode(promise: Promise) {
@@ -48,17 +48,6 @@ class VoiceBoardModule(private val reactContext: ReactApplicationContext) :
   fun setMode(value: String, promise: Promise) {
     PrefsBridge.setMode(reactContext, value)
     promise.resolve(null)
-  }
-
-  @ReactMethod
-  fun setClaudeApiKey(value: String, promise: Promise) {
-    PrefsBridge.setClaudeApiKey(reactContext, value)
-    promise.resolve(null)
-  }
-
-  @ReactMethod
-  fun hasClaudeApiKey(promise: Promise) {
-    promise.resolve(PrefsBridge.hasClaudeApiKey(reactContext))
   }
 
   // ---- Transcription engine + Groq ----
