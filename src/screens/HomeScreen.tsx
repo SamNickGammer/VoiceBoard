@@ -11,31 +11,45 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import StatusCard from '../components/StatusCard';
 import {
-  hasApiKey,
+  hasClaudeApiKey,
+  hasGroqApiKey,
   hasMicPermission,
-  isKeyboardEnabled,
-  openImeSettings,
+  hasOverlayPermission,
+  isAccessibilityEnabled,
+  isOverlayRunning,
+  openAccessibilitySettings,
   requestMicPermission,
-  showImePicker,
+  requestOverlayPermission,
+  startOverlay,
+  stopOverlay,
 } from '../utils/storage';
 import type {RootStackParamList} from '../../App';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 export default function HomeScreen({navigation}: Props) {
-  const [enabled, setEnabled] = useState(false);
+  const [overlayPerm, setOverlayPerm] = useState(false);
+  const [a11y, setA11y] = useState(false);
   const [mic, setMic] = useState(false);
-  const [apiKeySet, setApiKeySet] = useState(false);
+  const [groqKey, setGroqKey] = useState(false);
+  const [claudeKey, setClaudeKey] = useState(false);
+  const [overlayRunning, setOverlayRunning] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [e, m, a] = await Promise.all([
-      isKeyboardEnabled(),
+    const [op, a, m, g, c, r] = await Promise.all([
+      hasOverlayPermission(),
+      isAccessibilityEnabled(),
       hasMicPermission(),
-      hasApiKey(),
+      hasGroqApiKey(),
+      hasClaudeApiKey(),
+      isOverlayRunning(),
     ]);
-    setEnabled(e);
+    setOverlayPerm(op);
+    setA11y(a);
     setMic(m);
-    setApiKeySet(a);
+    setGroqKey(g);
+    setClaudeKey(c);
+    setOverlayRunning(r);
   }, []);
 
   useEffect(() => {
@@ -46,31 +60,77 @@ export default function HomeScreen({navigation}: Props) {
     return () => sub.remove();
   }, [refresh]);
 
+  const allReady = overlayPerm && a11y && mic && groqKey;
+
+  const toggleOverlay = async () => {
+    if (overlayRunning) await stopOverlay();
+    else await startOverlay();
+    setTimeout(refresh, 300);
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>VoiceBoard</Text>
         <Text style={styles.subtitle}>
-          AI voice keyboard. Speak; we transcribe and write.
+          Floating mic pill that lives above any keyboard. Tap, speak, tap again — the
+          transcribed text is injected into whatever you're typing in.
         </Text>
 
+        <View style={styles.bigCta}>
+          <TouchableOpacity
+            style={[
+              styles.bigButton,
+              !allReady && styles.bigButtonDisabled,
+              overlayRunning && styles.bigButtonStop,
+            ]}
+            onPress={toggleOverlay}
+            disabled={!allReady}>
+            <Text style={styles.bigButtonText}>
+              {overlayRunning ? 'Stop overlay' : 'Start overlay'}
+            </Text>
+          </TouchableOpacity>
+          {!allReady ? (
+            <Text style={styles.bigCtaHint}>
+              Grant the permissions below before starting.
+            </Text>
+          ) : null}
+        </View>
+
         <StatusCard
-          title="Keyboard enabled"
+          title="Display over other apps"
           subtitle={
-            enabled
-              ? 'VoiceBoard is in your input methods list.'
-              : 'Enable VoiceBoard in Android settings, then switch to it from any text field.'
+            overlayPerm
+              ? 'Granted. VoiceBoard can draw the floating pill.'
+              : 'Required to show the floating mic over your keyboard.'
           }
-          ok={enabled}
-          cta={{label: 'Open keyboard settings', onPress: openImeSettings}}
+          ok={overlayPerm}
+          cta={
+            overlayPerm
+              ? undefined
+              : {label: 'Open overlay settings', onPress: requestOverlayPermission}
+          }
         />
 
         <StatusCard
-          title="Microphone permission"
+          title="Accessibility service"
           subtitle={
-            mic
-              ? 'Granted. Mic taps in the IME can record audio.'
-              : 'Not granted. The IME cannot ask for this itself — grant it from this app.'
+            a11y
+              ? 'Enabled. Transcriptions can be injected into the focused field.'
+              : 'Lets VoiceBoard set text on the field you are typing in. Without this, transcribed text is copied to clipboard instead.'
+          }
+          ok={a11y}
+          cta={
+            a11y
+              ? undefined
+              : {label: 'Open accessibility settings', onPress: openAccessibilitySettings}
+          }
+        />
+
+        <StatusCard
+          title="Microphone"
+          subtitle={
+            mic ? 'Granted.' : 'Required to record what you say.'
           }
           ok={mic}
           cta={
@@ -87,29 +147,37 @@ export default function HomeScreen({navigation}: Props) {
         />
 
         <StatusCard
-          title="Claude API key"
+          title="Transcription engine"
           subtitle={
-            apiKeySet
-              ? 'Saved. Speech runs through Claude with your selected mode.'
-              : 'Not set. The IME will fall back to raw transcription text.'
+            groqKey
+              ? 'Groq API key saved. Free Whisper-large-v3-turbo will be used by default.'
+              : 'Add a Groq API key for free remote transcription, or download a local Whisper model in Settings.'
           }
-          ok={apiKeySet}
+          ok={groqKey}
           cta={{label: 'Open settings', onPress: () => navigation.navigate('Settings')}}
         />
 
-        <TouchableOpacity style={styles.pickerLink} onPress={showImePicker}>
-          <Text style={styles.pickerLinkText}>Switch input method</Text>
-        </TouchableOpacity>
+        <StatusCard
+          title="Claude post-processing"
+          subtitle={
+            claudeKey
+              ? 'Claude key saved. Transcripts get cleaned per the selected mode.'
+              : 'Optional. Without it, the raw transcription is injected as-is.'
+          }
+          ok={claudeKey}
+          cta={{label: 'Open settings', onPress: () => navigation.navigate('Settings')}}
+        />
 
         <View style={styles.helpBlock}>
-          <Text style={styles.helpTitle}>How to try it</Text>
-          <Text style={styles.helpStep}>1. Enable VoiceBoard in keyboard settings.</Text>
-          <Text style={styles.helpStep}>2. Grant the mic permission above.</Text>
+          <Text style={styles.helpTitle}>How it works</Text>
+          <Text style={styles.helpStep}>1. Grant the three permissions above.</Text>
+          <Text style={styles.helpStep}>2. Add a Groq key (or download a local model).</Text>
+          <Text style={styles.helpStep}>3. Tap "Start overlay" — a small pill appears.</Text>
           <Text style={styles.helpStep}>
-            3. Open any app with a text field, switch to VoiceBoard, tap the purple mic.
+            4. Switch to any app, tap into a text field, tap the pill, speak, tap again.
           </Text>
           <Text style={styles.helpStep}>
-            4. Speak, tap mic again to stop — text gets injected into the field.
+            5. Long-press the pill to switch Claude mode. Drag to reposition.
           </Text>
         </View>
       </ScrollView>
@@ -121,9 +189,18 @@ const styles = StyleSheet.create({
   safe: {flex: 1, backgroundColor: '#F3F4F6'},
   container: {padding: 20, paddingBottom: 40},
   title: {fontSize: 28, fontWeight: '700', color: '#111827'},
-  subtitle: {fontSize: 14, color: '#6B7280', marginTop: 4, marginBottom: 20},
-  pickerLink: {alignSelf: 'flex-start', paddingVertical: 8},
-  pickerLinkText: {color: '#7F77DD', fontWeight: '600'},
+  subtitle: {fontSize: 14, color: '#6B7280', marginTop: 4, marginBottom: 20, lineHeight: 20},
+  bigCta: {marginBottom: 20},
+  bigButton: {
+    backgroundColor: '#7F77DD',
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  bigButtonDisabled: {opacity: 0.5},
+  bigButtonStop: {backgroundColor: '#EF4444'},
+  bigButtonText: {color: '#FFFFFF', fontWeight: '700', fontSize: 16},
+  bigCtaHint: {color: '#6B7280', fontSize: 12, marginTop: 8, textAlign: 'center'},
   helpBlock: {
     marginTop: 16,
     padding: 16,

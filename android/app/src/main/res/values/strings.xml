@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">VoiceBoard</string>
+    <string name="accessibility_service_description">Lets the VoiceBoard floating mic inject transcribed text into the field you\'re typing in. VoiceBoard never reads or stores anything you type — it only writes back the text you dictated.</string>
+    <string name="accessibility_service_summary">Inject voice-transcribed text into the focused field</string>
+    <string name="overlay_notification_channel">VoiceBoard overlay</string>
+    <string name="overlay_notification_title">VoiceBoard is listening</string>
+    <string name="overlay_notification_text">Tap the floating pill to dictate.</string>
 </resources>

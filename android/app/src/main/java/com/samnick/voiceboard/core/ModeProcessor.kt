@@ -1,4 +1,4 @@
-package com.samnick.voiceboard.ime
+package com.samnick.voiceboard.core
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
