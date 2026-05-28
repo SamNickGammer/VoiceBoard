@@ -2,13 +2,22 @@ package com.samnick.voiceboard
 
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Bundle
 import androidx.core.app.ActivityCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
 class MainActivity : ReactActivity() {
+
+  override fun onCreate(savedInstanceState: Bundle?) {
+    // Must be called before super.onCreate; swaps the splash theme out for AppTheme
+    // and back-ports the Android 12 splash API to older devices.
+    installSplashScreen()
+    super.onCreate(savedInstanceState)
+  }
 
   override fun getMainComponentName(): String = "VoiceBoard"
 

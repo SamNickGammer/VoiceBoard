@@ -1,9 +1,17 @@
 <resources>
 
-    <!-- Base application theme. -->
+    <!-- Base application theme — used after the splash dismisses. -->
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+    </style>
+
+    <!-- Splash theme — what the system shows on cold start before MainActivity
+         paints. Inherits from Theme.SplashScreen (androidx.core:core-splashscreen)
+         so it back-ports the Android 12+ splash API to older devices. -->
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/AppTheme</item>
     </style>
 
 </resources>
